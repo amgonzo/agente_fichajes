@@ -9,6 +9,9 @@ const configuracionLectores =
 const lectorAutomatico =
     require("./lectorAutomatico");
 
+const EnrolamientoZKTeco =
+    require("./biometria/enrolamientoZKTeco");
+
 
 class WorkerService {
 
@@ -364,6 +367,13 @@ class WorkerService {
                     datos
                 );
 
+            case "enrolar_huella":
+
+                return await this.enrolarHuella(
+                    tarea,
+                    datos
+                );
+
             case "leer_fichadas":
 
                 return await this.leerFichadas(
@@ -458,6 +468,179 @@ class WorkerService {
                     datos.tarjeta ?? null
             }
         );
+    }
+
+
+    async enrolarHuella(
+        tarea,
+        datos
+    ) {
+
+        const marca =
+            String(
+                datos.marca || ""
+            ).trim()
+            .toLowerCase();
+
+        const ip =
+            String(
+                datos.ip || ""
+            ).trim();
+
+        const puerto =
+            Number(
+                datos.puerto || 4370
+            );
+
+        const idDedo =
+            Number(
+                datos.iddedo
+            );
+
+        if (!marca) {
+
+            throw new Error(
+                `La tarea #${tarea.idtarea} no indica la marca del lector.`
+            );
+        }
+
+        if (!ip) {
+
+            throw new Error(
+                `La tarea #${tarea.idtarea} no indica la IP del lector.`
+            );
+        }
+
+        if (!tarea.idempleado) {
+
+            throw new Error(
+                `La tarea #${tarea.idtarea} no indica el empleado.`
+            );
+        }
+
+        if (
+            !Number.isInteger(idDedo) ||
+            idDedo < 0 ||
+            idDedo > 9
+        ) {
+
+            throw new Error(
+                `La tarea #${tarea.idtarea} indica un dedo inválido.`
+            );
+        }
+
+        if (marca !== "zkteco") {
+
+            throw new Error(
+                `La marca "${marca}" todavía no tiene enrolamiento biométrico implementado.`
+            );
+        }
+
+        console.log(
+            "======================================"
+        );
+
+        console.log(
+            "INICIANDO ENROLAMIENTO DE HUELLA"
+        );
+
+        console.log(
+            `Empleado / usuario K40: ${tarea.idempleado}`
+        );
+
+        console.log(
+            `Dedo: ${idDedo}`
+        );
+
+        console.log(
+            `Lector: ${marca} ${ip}:${puerto}`
+        );
+
+        console.log(
+            "======================================"
+        );
+
+        const enrolamiento =
+            new EnrolamientoZKTeco(
+                ip,
+                puerto
+            );
+
+        try {
+
+            const resultado =
+                await enrolamiento.enrolarHuella(
+                    Number(
+                        tarea.idempleado
+                    ),
+                    idDedo
+                );
+
+            /*
+             * Buffer no se pierde al convertir
+             * la respuesta a JSON.
+             *
+             * JSON.stringify(Buffer) genera:
+             *
+             * {
+             *     type: "Buffer",
+             *     data: [...]
+             * }
+             *
+             * La central podrá recibir posteriormente
+             * esos datos para almacenarlos.
+             */
+
+            return {
+                ok: true,
+
+                idempleado:
+                    Number(
+                        tarea.idempleado
+                    ),
+
+                iddedo:
+                    idDedo,
+
+                usuario_lector:
+                    resultado.usuario,
+
+                dedo_lector:
+                    resultado.dedo,
+
+                valid:
+                    resultado.valid,
+
+                size:
+                    resultado.size,
+
+                mark:
+                    resultado.mark,
+
+                template:
+                    resultado.template
+            };
+
+        } finally {
+
+            /*
+             * El lector se desconecta siempre,
+             * tanto si el enrolamiento termina
+             * correctamente como si ocurre un error.
+             */
+
+            try {
+
+                await enrolamiento.desconectar();
+
+            } catch (error) {
+
+                console.error(
+                    "Error desconectando el lector después del enrolamiento:",
+                    error.message
+                );
+            }
+        }
     }
 
 

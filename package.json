@@ -13,6 +13,7 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "mysql2": "^3.24.5",
-    "zk-attendance-sdk": "^2.3.0"
+    "zk-attendance-sdk": "^2.3.0",
+    "zklib-ts": "^1.0.8"
   }
 }
