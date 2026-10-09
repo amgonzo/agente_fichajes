@@ -1,7 +1,14 @@
-const authService = require("./auth");
-const agentService = require("./agent");
-const asistenciaService = require("./asistencia");
-const db = require("./db");
+const authService =
+    require("./auth");
+
+const agentService =
+    require("./agent");
+
+const asistenciaService =
+    require("./asistencia");
+
+const db =
+    require("./db");
 
 const configuracionLectores =
     require("./configuracionLectores");
@@ -22,10 +29,6 @@ class WorkerService {
 
         this.intervalo = null;
 
-        /*
-         * Queremos detectar rápidamente tareas
-         * prioritarias.
-         */
         this.intervaloMs = 1000;
     }
 
@@ -42,16 +45,14 @@ class WorkerService {
             "Worker de tareas iniciado."
         );
 
-        /*
-         * Primera consulta inmediata.
-         */
         await this.procesarTareas();
 
-        this.intervalo = setInterval(() => {
+        this.intervalo =
+            setInterval(() => {
 
-            this.procesarTareas();
+                this.procesarTareas();
 
-        }, this.intervaloMs);
+            }, this.intervaloMs);
     }
 
 
@@ -76,11 +77,6 @@ class WorkerService {
 
     async procesarTareas() {
 
-        /*
-         * Evita que una segunda ejecución
-         * se superponga a una tarea que todavía
-         * está siendo procesada.
-         */
         if (this.procesando) {
             return;
         }
@@ -154,57 +150,66 @@ class WorkerService {
 
             } catch (error) {
 
-                console.error(
-                    `Error ejecutando tarea #${tarea.idtarea}:`,
-                    error.message
-                );
+    const mensajeError =
+        error?.err?.message ||
+        error?.message ||
+        (
+            typeof error === "string"
+                ? error
+                : "Error desconocido al ejecutar la tarea."
+        );
 
-                try {
+        console.error(
+            `Error ejecutando tarea #${tarea.idtarea}:`,
+            mensajeError
+        );
 
-                    await this.enviarResultado(
-                        tarea.idtarea,
-                        "error",
-                        {
-                            ok: false,
-                            error: error.message
-                        }
-                    );
+        console.error(
+            "Detalle del error:",
+            error
+        );
 
-                } catch (resultadoError) {
+        try {
 
-                    /*
-                     * Si la central cayó justo después
-                     * de entregar la tarea, no hacemos nada
-                     * más acá.
-                     *
-                     * La tarea seguirá en "procesando"
-                     * hasta que decidamos implementar
-                     * recuperación de tareas abandonadas.
-                     */
+            await this.enviarResultado(
+                tarea.idtarea,
+                "error",
+                {
+                    ok: false,
 
-                    console.error(
-                        "No se pudo informar el resultado:",
-                        resultadoError.message
-                    );
+                    error:
+                        mensajeError,
+
+                    command:
+                        error?.command || null,
+
+                    ip:
+                        error?.ip || null
                 }
+            );
 
-                agentService.actividad();
-            }
+        } catch (resultadoError) {
+
+            const mensajeResultado =
+                resultadoError?.err?.message ||
+                resultadoError?.message ||
+                "Error desconocido al informar el resultado.";
+
+            console.error(
+                "No se pudo informar el resultado:",
+                mensajeResultado
+            );
+
+            console.error(
+                "Detalle del error al informar resultado:",
+                resultadoError
+            );
+        }
+
+        agentService.actividad();
+    }
 
         } catch (error) {
-
-            /*
-             * Esto normalmente será:
-             *
-             * - central caída
-             * - timeout
-             * - error HTTP
-             * - respuesta inválida
-             *
-             * NO ponemos OFFLINE al Agent.
-             *
-             * En el siguiente ciclo se vuelve a intentar.
-             */
 
             agentService.errorCentral(
                 error
@@ -269,6 +274,7 @@ class WorkerService {
                     },
 
                     body: JSON.stringify({
+
                         agent_id:
                             agentId,
 
@@ -295,14 +301,6 @@ class WorkerService {
             );
         }
 
-        /*
-         * Si las credenciales del Agent fueron
-         * rechazadas, marcamos la autenticación
-         * como inválida.
-         *
-         * En el próximo ciclo se volverá a intentar
-         * normalmente.
-         */
         if (
             response.status === 401 ||
             response.status === 403
@@ -367,12 +365,22 @@ class WorkerService {
                     datos
                 );
 
+
+            case "sincronizar_empleados":
+
+                return await this.sincronizarEmpleados(
+                    tarea,
+                    datos
+                );
+
+
             case "enrolar_huella":
 
                 return await this.enrolarHuella(
                     tarea,
                     datos
                 );
+
 
             case "leer_fichadas":
 
@@ -381,6 +389,7 @@ class WorkerService {
                     datos
                 );
 
+
             case "reintentar_fichada":
 
                 return await this.reintentarFichada(
@@ -388,12 +397,14 @@ class WorkerService {
                     datos
                 );
 
+
             case "actualizar_configuracion":
 
                 return await this.actualizarConfiguracion(
                     tarea,
                     datos
                 );
+
 
             default:
 
@@ -471,6 +482,123 @@ class WorkerService {
     }
 
 
+    async sincronizarEmpleados(
+        tarea,
+        datos
+    ) {
+
+        const marca =
+            String(
+                datos.marca || ""
+            ).trim().toLowerCase();
+
+        const ip =
+            String(
+                datos.ip || ""
+            ).trim();
+
+        const puerto =
+            Number(
+                datos.puerto || 4370
+            );
+
+        const empleados =
+            datos.empleados;
+
+
+        if (!marca) {
+
+            throw new Error(
+                `La tarea #${tarea.idtarea} no indica la marca del lector.`
+            );
+        }
+
+
+        if (!ip) {
+
+            throw new Error(
+                `La tarea #${tarea.idtarea} no indica la IP del lector.`
+            );
+        }
+
+
+        if (
+            !Array.isArray(empleados)
+        ) {
+
+            throw new Error(
+                `La tarea #${tarea.idtarea} no contiene una lista válida de empleados.`
+            );
+        }
+
+
+        if (marca !== "zkteco") {
+
+            throw new Error(
+                `La marca "${marca}" todavía no tiene sincronización de empleados implementada.`
+            );
+        }
+
+
+        console.log(
+            "======================================"
+        );
+
+        console.log(
+            "INICIANDO SINCRONIZACIÓN DE EMPLEADOS"
+        );
+
+        console.log(
+            `Tarea: #${tarea.idtarea}`
+        );
+
+        console.log(
+            `Lector: ${marca} ${ip}:${puerto}`
+        );
+
+        console.log(
+            `Empleados recibidos: ${empleados.length}`
+        );
+
+        console.log(
+            "======================================"
+        );
+
+
+        const resultado =
+            await asistenciaService.sincronizarEmpleados(
+                marca,
+                ip,
+                puerto,
+                empleados
+            );
+
+
+        return {
+
+            ok:
+                resultado.ok,
+
+            eliminados:
+                resultado.eliminados || 0,
+
+            cargados:
+                resultado.cargados || 0,
+
+            errores:
+                resultado.errores || 0,
+
+            errores_detalle:
+                resultado.errores_detalle || [],
+
+            cantidad_empleados:
+                empleados.length,
+
+            empleados:
+                resultado.empleados || []
+        };
+    }
+
     async enrolarHuella(
         tarea,
         datos
@@ -491,6 +619,11 @@ class WorkerService {
             Number(
                 datos.puerto || 4370
             );
+
+        const documento =
+            String(
+                datos.documento || ""
+            ).trim();
 
         const idDedo =
             Number(
@@ -515,6 +648,13 @@ class WorkerService {
 
             throw new Error(
                 `La tarea #${tarea.idtarea} no indica el empleado.`
+            );
+        }
+
+        if (!documento) {
+
+            throw new Error(
+                `La tarea #${tarea.idtarea} no indica el documento del empleado.`
             );
         }
 
@@ -545,7 +685,11 @@ class WorkerService {
         );
 
         console.log(
-            `Empleado / usuario K40: ${tarea.idempleado}`
+            `Empleado BD: ${tarea.idempleado}`
+        );
+
+        console.log(
+            `Documento / usuario K40: ${documento}`
         );
 
         console.log(
@@ -568,36 +712,25 @@ class WorkerService {
 
         try {
 
+            await enrolamiento.conectar();
+
             const resultado =
                 await enrolamiento.enrolarHuella(
-                    Number(
-                        tarea.idempleado
-                    ),
+                    documento,
                     idDedo
                 );
 
-            /*
-             * Buffer no se pierde al convertir
-             * la respuesta a JSON.
-             *
-             * JSON.stringify(Buffer) genera:
-             *
-             * {
-             *     type: "Buffer",
-             *     data: [...]
-             * }
-             *
-             * La central podrá recibir posteriormente
-             * esos datos para almacenarlos.
-             */
-
             return {
+
                 ok: true,
 
                 idempleado:
                     Number(
                         tarea.idempleado
                     ),
+
+                documento:
+                    documento,
 
                 iddedo:
                     idDedo,
@@ -622,12 +755,6 @@ class WorkerService {
             };
 
         } finally {
-
-            /*
-             * El lector se desconecta siempre,
-             * tanto si el enrolamiento termina
-             * correctamente como si ocurre un error.
-             */
 
             try {
 
@@ -698,8 +825,11 @@ class WorkerService {
         ) {
 
             return {
+
                 ok: true,
+
                 cantidad: 0,
+
                 mensaje:
                     "El lector no tiene fichadas."
             };
@@ -750,6 +880,7 @@ class WorkerService {
                     .slice(0, 8);
 
             fichadasLocal.push({
+
                 deviceUserId,
 
                 idlector:
@@ -796,6 +927,7 @@ class WorkerService {
         );
 
         return {
+
             ok: true,
 
             cantidad:
@@ -851,6 +983,7 @@ class WorkerService {
         );
 
         return {
+
             ok: true,
 
             idfichada:
@@ -1075,15 +1208,6 @@ class WorkerService {
             data.configuracion || {};
 
 
-        /*
-         * Aplicamos la configuración central
-         * a los servicios que corresponden.
-         *
-         * Los valores de la central están expresados
-         * en segundos. Cada servicio se encarga de
-         * convertirlos a milisegundos.
-         */
-
         authService.aplicarConfiguracion(
             configuracion
         );
@@ -1108,6 +1232,7 @@ class WorkerService {
 
 
         return {
+
             ok: true,
 
             configuracion:
@@ -1120,4 +1245,5 @@ class WorkerService {
 }
 
 
-module.exports = new WorkerService();
+module.exports =
+    new WorkerService();

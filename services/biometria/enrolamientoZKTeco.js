@@ -29,10 +29,16 @@ class EnrolamientoZKTeco {
         return true;
     }
 
-    async enrolarHuella(idUsuario, idDedo) {
+    async enrolarHuella(documento, idDedo) {
 
-        if (!idUsuario) {
-            throw new Error("Falta idUsuario.");
+        // =====================================================
+        // VALIDACIONES
+        // =====================================================
+
+        documento = String(documento || "").trim();
+
+        if (!documento) {
+            throw new Error("Falta documento del empleado.");
         }
 
         if (
@@ -42,6 +48,16 @@ class EnrolamientoZKTeco {
             throw new Error("Falta idDedo.");
         }
 
+        idDedo = Number(idDedo);
+
+        if (
+            !Number.isInteger(idDedo) ||
+            idDedo < 0 ||
+            idDedo > 9
+        ) {
+            throw new Error("Id de dedo inválido.");
+        }
+
         let cantidadCapturas = 0;
 
         console.log("");
@@ -49,12 +65,22 @@ class EnrolamientoZKTeco {
         console.log("INICIANDO ENROLAMIENTO");
         console.log("======================================");
         console.log(
-            `Usuario: ${idUsuario}`
+            `Documento / Usuario K40: ${documento}`
         );
         console.log(
             `Dedo: ${idDedo}`
         );
         console.log("");
+
+        // =====================================================
+        // VERIFICAR CONEXIÓN
+        // =====================================================
+
+        if (!this.zk) {
+            throw new Error(
+                `No existe conexión activa con el lector ${this.ip}:${this.puerto}`
+            );
+        }
 
         // =====================================================
         // ESCUCHAR EVENTOS
@@ -97,6 +123,8 @@ class EnrolamientoZKTeco {
 
         // =====================================================
         // DATOS DE ENROLAMIENTO
+        //
+        // El K40 recibe como usuario el DOCUMENTO.
         // =====================================================
 
         const datosEnroll = Buffer.alloc(
@@ -105,14 +133,14 @@ class EnrolamientoZKTeco {
         );
 
         datosEnroll.write(
-            String(idUsuario),
+            documento,
             0,
             24,
             "ascii"
         );
 
         datosEnroll.writeUInt8(
-            Number(idDedo),
+            idDedo,
             24
         );
 
@@ -210,8 +238,8 @@ class EnrolamientoZKTeco {
 
         const plantilla =
             await this.zk.getUserTemplate(
-                String(idUsuario),
-                Number(idDedo)
+                documento,
+                idDedo
             );
 
         if (!plantilla) {
@@ -241,7 +269,7 @@ class EnrolamientoZKTeco {
         );
 
         console.log(
-            `Usuario: ${plantilla.uid}`
+            `Usuario K40: ${plantilla.uid}`
         );
 
         console.log(
